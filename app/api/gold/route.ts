@@ -11,7 +11,7 @@ export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const grams = searchParams.get('grams') === 'true';
 
-  let data: any = null;
+  let data = null;
   let success = false;
   let lastError: Error | null = null;
 
