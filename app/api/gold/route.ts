@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import * as cheerio from 'cheerio';
 
 const GOLD_API_KEYS = [
   process.env.GOLD_API_KEY_1,
@@ -12,6 +14,8 @@ const METALS_API_KEY = process.env.METALS_API_KEY;
 const FCS_API_KEY = process.env.FCS_API_KEY;
 
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache for gold prices
+
+const TROY_OUNCE_TO_GRAMS = 31.1034768;
 
 type GoldPricePayload = {
   price_oz: number;
@@ -238,57 +242,12 @@ async function fetchFcsApi(): Promise<GoldPricePayload | null> {
   }
 }
 
-async function fetchGoldPriceOrg(): Promise<GoldPricePayload | null> {
-  try {
-    const response = await fetch('https://goldprice.org/', {
-      cache: 'no-store',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      },
-    });
-
-    if (!response.ok) return null;
-
-    const html = await response.text();
-
-    // Look for CAD price patterns on goldprice.org
-    const patterns = [
-      /CAD[^0-9]*([0-9,]+\.[0-9]{2})/i,
-      /"cad"[^0-9]*([0-9,]+\.[0-9]{2})/i,
-    ];
-
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        const priceStr = match[1].replace(/,/g, '');
-        const price_oz = Number(priceStr);
-        if (Number.isFinite(price_oz) && price_oz > 0) {
-          const price_gram_24k = price_oz / 31.1034768;
-          return {
-            price_oz,
-            price_gram_24k,
-            currency: 'CAD',
-            provider: 'goldprice.org',
-          };
-        }
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[goldprice.org] Error:', error);
-    return null;
-  }
-}
-
 /**
  * Gold Price API - Waterfall provider strategy:
  * 1. goldapi.io (primary, tries 3 API keys)
  * 2. metals-api.com (alternative provider)
  * 3. fcsapi.com (backup provider)
- * 4. goldprice.org (web scraping fallback)
- * 5. monthly-fallback (stored JSON data from beginning of month)
+ * 4. monthly-fallback (stored JSON data from beginning of month)
  */
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
@@ -309,7 +268,6 @@ export async function GET(request: Request): Promise<Response> {
     { name: 'goldapi.io', fn: fetchGoldApiIo },
     { name: 'metals-api', fn: fetchMetalsApi },
     { name: 'fcsapi', fn: fetchFcsApi },
-    { name: 'goldprice.org', fn: fetchGoldPriceOrg },
   ];
 
   for (const { name, fn } of providers) {

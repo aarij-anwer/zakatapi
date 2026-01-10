@@ -123,15 +123,7 @@ Both gold and silver APIs use a resilient waterfall approach that tries provider
 - If succeeds → cache, update monthly file, and return
 - If fails → move to next provider
 
-### 4. Web Scraping (Quaternary)
-
-- **Gold**: goldprice.org
-- **Silver**: silverprice.org
-- No API key required
-- If succeeds → cache, update monthly file, and return
-- If fails → move to next provider
-
-### 5. Monthly Fallback (Last Resort)
+### 4. Monthly Fallback (Last Resort)
 
 - Reads from `/public/{metal}-monthly-prices.json`
 - Uses current month's stored price (auto-updated on every successful API call)
@@ -162,71 +154,4 @@ FCS_API_KEY=your-fcs-api-key
 
 # Protected endpoint secret for monthly updates
 UPDATE_MONTHLY_SECRET=your-random-secret
-```
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Automated Monthly Updates
-
-To ensure monthly price snapshots are stored, you can set up automated updates using GitHub Actions or Vercel Cron Jobs.
-
-### GitHub Actions (Free, Recommended)
-
-Create `.github/workflows/update-monthly-prices.yml`:
-
-```yaml
-name: Update Monthly Prices
-on:
-  schedule:
-    - cron: '0 0 1 * *' # 1st of month at midnight UTC
-  workflow_dispatch: # Manual trigger
-
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Gold Price
-        run: |
-          curl -X POST "https://yourdomain.com/api/gold/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
-
-      - name: Update Silver Price
-        run: |
-          curl -X POST "https://yourdomain.com/api/silver/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
-```
-
-### Vercel Cron Jobs (Pro Plan)
-
-Add to `vercel.json`:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/gold/update-monthly?secret=YOUR_SECRET",
-      "schedule": "0 0 1 * *"
-    },
-    {
-      "path": "/api/silver/update-monthly?secret=YOUR_SECRET",
-      "schedule": "0 0 1 * *"
-    }
-  ]
-}
 ```

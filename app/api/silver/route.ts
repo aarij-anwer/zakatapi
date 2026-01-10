@@ -253,57 +253,12 @@ async function fetchFcsApi(): Promise<SilverPricePayload | null> {
   }
 }
 
-async function fetchSilverPriceOrg(): Promise<SilverPricePayload | null> {
-  try {
-    const response = await fetch('https://silverprice.org/', {
-      cache: 'no-store',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-      },
-    });
-
-    if (!response.ok) return null;
-
-    const html = await response.text();
-
-    // Look for CAD price patterns on silverprice.org
-    const patterns = [
-      /CAD[^0-9]*([0-9,]+\.[0-9]{2})/i,
-      /"cad"[^0-9]*([0-9,]+\.[0-9]{2})/i,
-    ];
-
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        const priceStr = match[1].replace(/,/g, '');
-        const price_oz = Number(priceStr);
-        if (Number.isFinite(price_oz) && price_oz > 0) {
-          const price_gram_24k = price_oz / 31.1034768;
-          return {
-            price_oz,
-            price_gram_24k,
-            currency: 'CAD',
-            provider: 'silverprice.org',
-          };
-        }
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[silverprice.org] Error:', error);
-    return null;
-  }
-}
-
 /**
  * Silver Price API - Waterfall provider strategy:
  * 1. goldapi.io (primary, tries 3 API keys)
  * 2. metals-api.com (alternative provider)
  * 3. fcsapi.com (backup provider)
- * 4. silverprice.org (web scraping fallback)
- * 5. monthly-fallback (stored JSON data from beginning of month)
+ * 4. monthly-fallback (stored JSON data from beginning of month)
  */
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
@@ -324,7 +279,6 @@ export async function GET(request: Request): Promise<Response> {
     { name: 'goldapi.io', fn: fetchGoldApiIo },
     { name: 'metals-api', fn: fetchMetalsApi },
     { name: 'fcsapi', fn: fetchFcsApi },
-    { name: 'silverprice.org', fn: fetchSilverPriceOrg },
   ];
 
   for (const { name, fn } of providers) {
