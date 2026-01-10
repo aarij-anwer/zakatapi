@@ -5,11 +5,11 @@ import { writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 /**
- * Updates the monthly gold price snapshot.
- * Usage: POST /api/gold/update-monthly?secret=YOUR_SECRET
+ * Updates the monthly silver price snapshot.
+ * Usage: POST /api/silver/update-monthly?secret=YOUR_SECRET
  *
  * This endpoint should be called at the beginning of each month
- * to store the current gold price as a fallback.
+ * to store the current silver price as a fallback.
  *
  * You can automate this with:
  * - Vercel Cron Jobs
@@ -30,13 +30,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    // Fetch current gold price from the main API
+    // Fetch current silver price from the main API
     const baseUrl = request.url.replace('/update-monthly', '').split('?')[0];
     const response = await fetch(baseUrl, { cache: 'no-store' });
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to fetch current gold price' },
+        { error: 'Failed to fetch current silver price' },
         { status: 500 }
       );
     }
@@ -52,14 +52,18 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Load existing monthly prices
-    const filePath = join(process.cwd(), 'public', 'gold-monthly-prices.json');
+    const filePath = join(
+      process.cwd(),
+      'public',
+      'silver-monthly-prices.json'
+    );
     let monthlyPrices: Record<string, any> = {};
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
       monthlyPrices = JSON.parse(fileContent);
     } catch (error) {
-      console.log('[Update Monthly] Creating new monthly prices file');
+      console.log('[Update Silver Monthly] Creating new monthly prices file');
       monthlyPrices = {};
     }
 
@@ -84,7 +88,7 @@ export async function POST(request: Request): Promise<Response> {
     writeFileSync(filePath, JSON.stringify(monthlyPrices, null, 2), 'utf-8');
 
     console.log(
-      `[Update Monthly] Stored price for ${monthKey}: ${data.price_oz} CAD/oz`
+      `[Update Silver Monthly] Stored price for ${monthKey}: ${data.price_oz} CAD/oz`
     );
 
     return NextResponse.json({
@@ -93,13 +97,13 @@ export async function POST(request: Request): Promise<Response> {
       price_oz: data.price_oz,
       price_gram_24k: data.price_gram_24k,
       provider: data.provider,
-      message: `Successfully stored monthly price for ${monthKey}`,
+      message: `Successfully stored monthly silver price for ${monthKey}`,
     });
   } catch (error) {
-    console.error('[Update Monthly] Error:', error);
+    console.error('[Update Silver Monthly] Error:', error);
     return NextResponse.json(
       {
-        error: 'Failed to update monthly price',
+        error: 'Failed to update monthly silver price',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }

@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 const GOLD_API_KEYS = [
@@ -45,9 +46,53 @@ function setCachedPrice(key: string, data: GoldPricePayload) {
   priceCache.set(key, { ts: Date.now(), data });
 }
 
+function updateMonthlyPriceFile(data: GoldPricePayload) {
+  // Non-blocking update - don't fail the API request if this fails
+  try {
+    const filePath = join(process.cwd(), 'public', 'gold-monthly-prices.json');
+    let monthlyPrices: Record<string, any> = {};
+
+    // Load existing data
+    try {
+      const fileContent = readFileSync(filePath, 'utf-8');
+      monthlyPrices = JSON.parse(fileContent);
+    } catch {
+      // File doesn't exist or is invalid - start fresh
+      console.log('[Update Monthly File] Creating new file');
+    }
+
+    // Get current month key (YYYY-MM format)
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, '0')}`;
+
+    // Update current month with latest successful price
+    monthlyPrices[monthKey] = {
+      price: data.price_oz,
+      price_oz: data.price_oz,
+      price_gram_24k: data.price_gram_24k,
+      currency: data.currency,
+      provider: data.provider,
+      cached: true,
+      timestamp: now.toISOString(),
+    };
+
+    // Write back to file
+    writeFileSync(filePath, JSON.stringify(monthlyPrices, null, 2), 'utf-8');
+
+    console.log(
+      `[Update Monthly File] Updated ${monthKey} with ${data.price_oz} CAD/oz from ${data.provider}`
+    );
+  } catch (error) {
+    // Don't fail the request if file update fails
+    console.error('[Update Monthly File] Error updating file:', error);
+  }
+}
+
 function getMonthlyFallback(): GoldPricePayload | null {
   try {
-    const filePath = join(process.cwd(), 'data', 'gold-monthly-prices.json');
+    const filePath = join(process.cwd(), 'public', 'gold-monthly-prices.json');
     const fileContent = readFileSync(filePath, 'utf-8');
     const monthlyPrices = JSON.parse(fileContent);
 
@@ -85,8 +130,11 @@ function getMonthlyFallback(): GoldPricePayload | null {
 }
 
 async function fetchGoldApiIo(): Promise<GoldPricePayload | null> {
-  for (const key of GOLD_API_KEYS) {
+  for (let i = 0; i < GOLD_API_KEYS.length; i++) {
+    const key = GOLD_API_KEYS[i];
     if (!key) continue;
+
+    const keyName = `GOLD_API_KEY_${i + 1}`;
 
     try {
       const response = await fetch('https://www.goldapi.io/api/XAU/CAD', {
@@ -103,16 +151,21 @@ async function fetchGoldApiIo(): Promise<GoldPricePayload | null> {
           typeof data.price === 'number' &&
           typeof data.price_gram_24k === 'number'
         ) {
+          console.log(`[goldapi.io] Success using ${keyName}`);
           return {
             price_oz: data.price,
             price_gram_24k: data.price_gram_24k,
             currency: 'CAD',
-            provider: 'goldapi.io',
+            provider: `goldapi.io (${keyName})`,
           };
         }
+      } else {
+        console.log(
+          `[goldapi.io] ${keyName} failed with status ${response.status}`
+        );
       }
     } catch (error) {
-      console.error('[goldapi.io] Error:', error);
+      console.error(`[goldapi.io] ${keyName} error:`, error);
     }
   }
   return null;
@@ -266,6 +319,9 @@ export async function GET(request: Request): Promise<Response> {
         // Cache the result
         if (!debug) setCachedPrice(cacheKey, result);
 
+        // Update monthly price file with latest successful price
+        updateMonthlyPriceFile(result);
+
         const price = grams ? result.price_gram_24k : result.price_oz;
         return NextResponse.json({
           price,
@@ -273,6 +329,7 @@ export async function GET(request: Request): Promise<Response> {
           price_gram_24k: result.price_gram_24k,
           currency: result.currency,
           provider: result.provider,
+          cached: false,
         });
       }
 
@@ -302,6 +359,7 @@ export async function GET(request: Request): Promise<Response> {
       price_gram_24k: fallback.price_gram_24k,
       currency: fallback.currency,
       provider: fallback.provider,
+      cached: false,
     });
   }
 

@@ -1,0 +1,11 @@
+{
+  "2026-01": {
+    "price": 111.226,
+    "price_oz": 111.226,
+    "price_gram_24k": 3.576,
+    "currency": "CAD",
+    "provider": "goldapi.io (GOLD_API_KEY_1)",
+    "cached": true,
+    "timestamp": "2026-01-10T19:41:09.160Z"
+  }
+}

@@ -1,4 +1,168 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zakat API
+
+A resilient Next.js API for fetching real-time gold and silver prices in CAD with multiple provider fallback strategies.
+
+## Features
+
+- **Multi-provider waterfall strategy** - Automatic failover across multiple data sources
+- **In-memory caching** - 10-minute cache to reduce API calls
+- **Monthly fallback** - Auto-updated JSON storage for guaranteed uptime
+- **Debug mode** - Detailed error reporting for troubleshooting
+- **Public price history** - Accessible monthly price snapshots
+
+## API Endpoints
+
+### Gold Price API
+
+#### Get Current Gold Price
+
+```
+GET /api/gold
+GET /api/gold?grams=true
+GET /api/gold?debug=1
+```
+
+**Query Parameters:**
+
+- `grams=true` - Returns price per gram (24k) instead of per troy ounce
+- `debug=1` - Returns detailed error information from all providers
+
+**Response:**
+
+```json
+{
+  "price": 6274.64,
+  "price_oz": 6274.64,
+  "price_gram_24k": 201.7344,
+  "currency": "CAD",
+  "provider": "goldapi.io (GOLD_API_KEY_1)",
+  "cached": false
+}
+```
+
+#### Update Monthly Snapshot (Protected)
+
+```
+POST /api/gold/update-monthly?secret=YOUR_SECRET
+```
+
+#### Monthly Price History (Public)
+
+```
+GET /gold-monthly-prices.json
+```
+
+### Silver Price API
+
+#### Get Current Silver Price
+
+```
+GET /api/silver
+GET /api/silver?grams=true
+GET /api/silver?debug=1
+```
+
+**Query Parameters:**
+
+- `grams=true` - Returns price per gram instead of per troy ounce
+- `debug=1` - Returns detailed error information from all providers
+
+**Response:**
+
+```json
+{
+  "price": 111.226,
+  "price_oz": 111.226,
+  "price_gram_24k": 3.576,
+  "currency": "CAD",
+  "provider": "goldapi.io (GOLD_API_KEY_1)",
+  "cached": false
+}
+```
+
+#### Update Monthly Snapshot (Protected)
+
+```
+POST /api/silver/update-monthly?secret=YOUR_SECRET
+```
+
+#### Monthly Price History (Public)
+
+```
+GET /silver-monthly-prices.json
+```
+
+## Waterfall Provider Strategy
+
+Both gold and silver APIs use a resilient waterfall approach that tries providers sequentially until one succeeds:
+
+### 0. In-Memory Cache (First Priority)
+
+- Checks 10-minute in-memory cache
+- If found → return immediately
+- Skipped in debug mode
+
+### 1. goldapi.io (Primary)
+
+- Tries 3 API keys sequentially: `GOLD_API_KEY_1`, `GOLD_API_KEY_2`, `GOLD_API_KEY_3`
+- Logs which key was used
+- If any succeeds → cache, update monthly file, and return
+- If all fail → move to next provider
+
+### 2. metals-api.com (Secondary)
+
+- Requires `METALS_API_KEY` environment variable
+- Skipped if no key configured
+- If succeeds → cache, update monthly file, and return
+- If fails → move to next provider
+
+### 3. fcsapi.com (Tertiary)
+
+- Requires `FCS_API_KEY` environment variable
+- Skipped if no key configured
+- If succeeds → cache, update monthly file, and return
+- If fails → move to next provider
+
+### 4. Web Scraping (Quaternary)
+
+- **Gold**: goldprice.org
+- **Silver**: silverprice.org
+- No API key required
+- If succeeds → cache, update monthly file, and return
+- If fails → move to next provider
+
+### 5. Monthly Fallback (Last Resort)
+
+- Reads from `/public/{metal}-monthly-prices.json`
+- Uses current month's stored price (auto-updated on every successful API call)
+- If current month not found, uses most recent available month
+- Guarantees API never fully fails
+
+### Key Benefits
+
+- **Resilience**: Single provider failure doesn't break the API
+- **Cost optimization**: Uses free/cheaper providers as fallbacks
+- **Rate limit tolerance**: Automatically rotates through API keys and providers
+- **Guaranteed uptime**: Monthly fallback ensures service availability
+- **Auto-maintenance**: JSON files update automatically on every successful call
+
+## Environment Variables
+
+Create a `.env.local` file with the following:
+
+```env
+# Gold API Keys (goldapi.io) - tries in order
+GOLD_API_KEY_1=your-key-1
+GOLD_API_KEY_2=your-key-2
+GOLD_API_KEY_3=your-key-3
+
+# Optional fallback providers
+METALS_API_KEY=your-metals-api-key
+FCS_API_KEY=your-fcs-api-key
+
+# Protected endpoint secret for monthly updates
+UPDATE_MONTHLY_SECRET=your-random-secret
+```
 
 ## Getting Started
 
@@ -20,17 +184,49 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Learn More
+## Automated Monthly Updates
 
-To learn more about Next.js, take a look at the following resources:
+To ensure monthly price snapshots are stored, you can set up automated updates using GitHub Actions or Vercel Cron Jobs.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### GitHub Actions (Free, Recommended)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create `.github/workflows/update-monthly-prices.yml`:
 
-## Deploy on Vercel
+```yaml
+name: Update Monthly Prices
+on:
+  schedule:
+    - cron: '0 0 1 * *' # 1st of month at midnight UTC
+  workflow_dispatch: # Manual trigger
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Gold Price
+        run: |
+          curl -X POST "https://yourdomain.com/api/gold/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+      - name: Update Silver Price
+        run: |
+          curl -X POST "https://yourdomain.com/api/silver/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
+```
+
+### Vercel Cron Jobs (Pro Plan)
+
+Add to `vercel.json`:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/gold/update-monthly?secret=YOUR_SECRET",
+      "schedule": "0 0 1 * *"
+    },
+    {
+      "path": "/api/silver/update-monthly?secret=YOUR_SECRET",
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}
+```
