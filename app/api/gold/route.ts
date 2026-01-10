@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextResponse } from 'next/server';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
-import * as cheerio from 'cheerio';
 
 const GOLD_API_KEYS = [
   process.env.GOLD_API_KEY_1,
@@ -48,50 +47,6 @@ function getCachedPrice(key: string): GoldPricePayload | null {
 
 function setCachedPrice(key: string, data: GoldPricePayload) {
   priceCache.set(key, { ts: Date.now(), data });
-}
-
-function updateMonthlyPriceFile(data: GoldPricePayload) {
-  // Non-blocking update - don't fail the API request if this fails
-  try {
-    const filePath = join(process.cwd(), 'public', 'gold-monthly-prices.json');
-    let monthlyPrices: Record<string, any> = {};
-
-    // Load existing data
-    try {
-      const fileContent = readFileSync(filePath, 'utf-8');
-      monthlyPrices = JSON.parse(fileContent);
-    } catch {
-      // File doesn't exist or is invalid - start fresh
-      console.log('[Update Monthly File] Creating new file');
-    }
-
-    // Get current month key (YYYY-MM format)
-    const now = new Date();
-    const monthKey = `${now.getFullYear()}-${String(
-      now.getMonth() + 1
-    ).padStart(2, '0')}`;
-
-    // Update current month with latest successful price
-    monthlyPrices[monthKey] = {
-      price: data.price_oz,
-      price_oz: data.price_oz,
-      price_gram_24k: data.price_gram_24k,
-      currency: data.currency,
-      provider: data.provider,
-      cached: true,
-      timestamp: now.toISOString(),
-    };
-
-    // Write back to file
-    writeFileSync(filePath, JSON.stringify(monthlyPrices, null, 2), 'utf-8');
-
-    console.log(
-      `[Update Monthly File] Updated ${monthKey} with ${data.price_oz} CAD/oz from ${data.provider}`
-    );
-  } catch (error) {
-    // Don't fail the request if file update fails
-    console.error('[Update Monthly File] Error updating file:', error);
-  }
 }
 
 function getMonthlyFallback(): GoldPricePayload | null {
@@ -276,9 +231,6 @@ export async function GET(request: Request): Promise<Response> {
       if (result) {
         // Cache the result
         if (!debug) setCachedPrice(cacheKey, result);
-
-        // Update monthly price file with latest successful price
-        updateMonthlyPriceFile(result);
 
         const price = grams ? result.price_gram_24k : result.price_oz;
         return NextResponse.json({
