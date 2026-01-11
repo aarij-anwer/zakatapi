@@ -113,12 +113,13 @@ GET /api/nisab?debug=1
   "price_gram_24k": 201.7344,
   "nisab_grams": 85,
   "currency": "CAD",
-  "provider": "goldapi.io",
+  "provider": "goldapi.io (GOLD_API_KEY_1)",
+  "type": "Gold",
   "cached": false
 }
 ```
 
-The nisab endpoint calculates the Islamic nisab threshold, which is 85 grams of gold. Returns the current value in CAD based on 24k gold price per gram.
+The nisab endpoint calculates the Islamic nisab threshold, which is 85 grams of gold. It internally calls the `/api/gold?grams=true` endpoint and multiplies the result by 85, ensuring consistency with the gold price API.
 
 ## Waterfall Provider Strategy
 
@@ -147,6 +148,9 @@ Both gold and silver APIs use a resilient waterfall approach that tries provider
 ### 3. fcsapi.com (Tertiary)
 
 - Requires `FCS_API_KEY` environment variable
+- Fetches XAUUSD commodity price from FCS API v4
+- Converts USD price to CAD using custom forex endpoint
+- Falls back to 1.40 USD/CAD rate if conversion fails
 - Skipped if no key configured
 - If succeeds → cache, update monthly file, and return
 - If fails → move to next provider

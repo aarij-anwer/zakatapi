@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { NextResponse } from 'next/server';
@@ -171,26 +172,65 @@ async function fetchFcsApi(): Promise<GoldPricePayload | null> {
   }
 
   try {
-    const response = await fetch(
-      `https://fcsapi.com/api-v3/forex/latest?symbol=XAU/CAD&access_key=${FCS_API_KEY}`,
-      { cache: 'no-store' }
+    // Fetch gold price in USD
+    const goldUrl = `https://api-v4.fcsapi.com/forex/latest?symbol=XAUUSD&type=commodity&access_key=${FCS_API_KEY}`;
+    console.log(
+      '[fcsapi] Fetching gold from:',
+      goldUrl.replace(FCS_API_KEY, '***')
     );
 
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    if (data?.status && data?.response?.[0]?.price) {
-      const price_oz = Number(data.response[0].price);
-      const price_gram_24k = price_oz / 31.1034768;
-
-      return {
-        price_oz,
-        price_gram_24k,
-        currency: 'CAD',
-        provider: 'fcsapi',
-      };
+    const goldResponse = await fetch(goldUrl, { cache: 'no-store' });
+    if (!goldResponse.ok) {
+      const errorText = await goldResponse.text();
+      console.log('[fcsapi] Gold error response:', errorText);
+      return null;
     }
-    return null;
+
+    const goldData = await goldResponse.json();
+    console.log('[fcsapi] Gold response:', JSON.stringify(goldData, null, 2));
+
+    // Find FCM:XAUUSD ticker
+    const goldTicker = goldData?.response?.find(
+      (r: any) => r.ticker === 'FCM:XAUUSD'
+    );
+    if (!goldTicker?.active?.c) {
+      console.log('[fcsapi] FCM:XAUUSD ticker not found');
+      return null;
+    }
+
+    const price_oz_usd = Number(goldTicker.active.c);
+    console.log('[fcsapi] Gold price in USD per oz:', price_oz_usd);
+
+    // Fetch USD/CAD exchange rate from custom endpoint
+    const forexUrl = `https://smart-portfolio-allocator.vercel.app/api/fx?base=USD&quote=CAD`;
+    console.log('[fcsapi] Fetching USD/CAD from custom endpoint');
+    const forexResponse = await fetch(forexUrl, { cache: 'no-store' });
+    if (!forexResponse.ok) {
+      console.log('[fcsapi] Failed to fetch USD/CAD rate');
+      return null;
+    }
+
+    const forexData = await forexResponse.json();
+    console.log('[fcsapi] Forex response:', JSON.stringify(forexData, null, 2));
+    const usdCadRate = forexData?.rate ? Number(forexData.rate) : 1.4; // Fallback rate
+    console.log('[fcsapi] USD/CAD rate:', usdCadRate);
+
+    // Convert to CAD
+    const price_oz = price_oz_usd * usdCadRate;
+    const price_gram_24k = price_oz / 31.1034768;
+
+    console.log(
+      '[fcsapi] Success! Price per oz (CAD):',
+      price_oz,
+      'Price per gram:',
+      price_gram_24k
+    );
+    return {
+      price_oz,
+      price_gram_24k,
+      currency: 'CAD',
+      provider: 'fcsapi',
+    };
   } catch (error) {
     console.error('[fcsapi] Error:', error);
     return null;
@@ -226,9 +266,11 @@ export async function GET(request: Request): Promise<Response> {
   ];
 
   for (const { name, fn } of providers) {
+    console.log(`[Gold API] Trying provider: ${name}`);
     try {
       const result = await fn();
       if (result) {
+        console.log(`[Gold API] ✓ Success with ${name}`);
         // Cache the result
         if (!debug) setCachedPrice(cacheKey, result);
 
@@ -243,6 +285,7 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
 
+      console.log(`[Gold API] ✗ ${name} returned no data`);
       if (debug) {
         errors.push({
           provider: name,
@@ -250,6 +293,7 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
     } catch (error) {
+      console.log(`[Gold API] ✗ ${name} threw error:`, error);
       if (debug) {
         errors.push({
           provider: name,
