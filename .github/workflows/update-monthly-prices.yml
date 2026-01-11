@@ -46,6 +46,9 @@ jobs:
         run: |
           MONTH=$(date -u +"%Y-%m")
           echo '${{ steps.silver.outputs.response }}' | jq --arg month "$MONTH" '{($month): {price: .price, price_oz: .price_oz, price_gram_24k: .price_gram_24k, currency: .currency, provider: "monthly_run", cached: false}}' > temp-silver.json
+
+          if [ -f public/silver-monthly-prices.json ]; then
+            jq --arg month "$MONTH" --slurpfile new temp-silver.json '. + $new[0]' public/silver-monthly-prices.json > temp-merged-silver.json
             mv temp-merged-silver.json public/silver-monthly-prices.json
           else
             mv temp-silver.json public/silver-monthly-prices.json
