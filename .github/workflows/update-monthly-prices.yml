@@ -9,15 +9,53 @@ on:
 jobs:
   update-prices:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Update Gold Prices
+
+      - name: Fetch Gold Price
+        id: gold
         run: |
-          curl -X POST "https://zakatapi.vercel.app/api/gold/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
-      
-      - name: Update Silver Prices
+          RESPONSE=$(curl -s "https://zakatapi.vercel.app/api/gold?grams=true")
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+
+      - name: Fetch Silver Price
+        id: silver
         run: |
-          curl -X POST "https://zakatapi.vercel.app/api/silver/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
+          RESPONSE=$(curl -s "https://zakatapi.vercel.app/api/silver?grams=true")
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+
+      - name: Update Gold JSON
+        run: |
+          MONTH=$(date -u +"%Y-%m")
+          echo '${{ steps.gold.outputs.response }}' | jq --arg month "$MONTH" '{($month): {price_oz: .price_oz, price_gram_24k: .price_gram_24k, currency: .currency}}' > temp-gold.json
+
+          if [ -f public/gold-monthly-prices.json ]; then
+            jq --arg month "$MONTH" --slurpfile new temp-gold.json '. + $new[0]' public/gold-monthly-prices.json > temp-merged-gold.json
+            mv temp-merged-gold.json public/gold-monthly-prices.json
+          else
+            mv temp-gold.json public/gold-monthly-prices.json
+          fi
+          rm -f temp-gold.json
+
+      - name: Update Silver JSON
+        run: |
+          MONTH=$(date -u +"%Y-%m")
+          echo '${{ steps.silver.outputs.response }}' | jq --arg month "$MONTH" '{($month): {price_oz: .price_oz, price_gram_24k: .price_gram_24k, currency: .currency}}' > temp-silver.json
+
+          if [ -f public/silver-monthly-prices.json ]; then
+            jq --arg month "$MONTH" --slurpfile new temp-silver.json '. + $new[0]' public/silver-monthly-prices.json > temp-merged-silver.json
+            mv temp-merged-silver.json public/silver-monthly-prices.json
+          else
+            mv temp-silver.json public/silver-monthly-prices.json
+          fi
+          rm -f temp-silver.json
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/gold-monthly-prices.json public/silver-monthly-prices.json
+          git diff --staged --quiet || git commit -m "chore: update monthly gold and silver prices for $(date -u +"%Y-%m")"
+          git push
