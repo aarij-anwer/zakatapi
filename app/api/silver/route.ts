@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -178,26 +179,71 @@ async function fetchFcsApi(): Promise<SilverPricePayload | null> {
   }
 
   try {
-    const response = await fetch(
-      `https://fcsapi.com/api-v3/forex/latest?symbol=XAG/CAD&access_key=${FCS_API_KEY}`,
-      { cache: 'no-store' }
+    // Fetch silver price in USD
+    const silverUrl = `https://api-v4.fcsapi.com/forex/latest?symbol=XAGUSD&type=commodity&access_key=${FCS_API_KEY}`;
+    console.log(
+      '[fcsapi/silver] Fetching silver from:',
+      silverUrl.replace(FCS_API_KEY, '***')
     );
 
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    if (data?.status && data?.response?.[0]?.price) {
-      const price_oz = Number(data.response[0].price);
-      const price_gram_24k = price_oz / 31.1034768;
-
-      return {
-        price_oz,
-        price_gram_24k,
-        currency: 'CAD',
-        provider: 'fcsapi',
-      };
+    const silverResponse = await fetch(silverUrl, { cache: 'no-store' });
+    if (!silverResponse.ok) {
+      const errorText = await silverResponse.text();
+      console.log('[fcsapi/silver] Silver error response:', errorText);
+      return null;
     }
-    return null;
+
+    const silverData = await silverResponse.json();
+    console.log(
+      '[fcsapi/silver] Silver response:',
+      JSON.stringify(silverData, null, 2)
+    );
+
+    // Find FCM:XAGUSD ticker
+    const silverTicker = silverData?.response?.find(
+      (r: any) => r.ticker === 'FCM:XAGUSD'
+    );
+    if (!silverTicker?.active?.c) {
+      console.log('[fcsapi/silver] FCM:XAGUSD ticker not found');
+      return null;
+    }
+
+    const price_oz_usd = Number(silverTicker.active.c);
+    console.log('[fcsapi/silver] Silver price in USD per oz:', price_oz_usd);
+
+    // Fetch USD/CAD exchange rate from custom endpoint
+    const forexUrl = `https://smart-portfolio-allocator.vercel.app/api/fx?base=USD&quote=CAD`;
+    console.log('[fcsapi/silver] Fetching USD/CAD from custom endpoint');
+    const forexResponse = await fetch(forexUrl, { cache: 'no-store' });
+    if (!forexResponse.ok) {
+      console.log('[fcsapi/silver] Failed to fetch USD/CAD rate');
+      return null;
+    }
+
+    const forexData = await forexResponse.json();
+    console.log(
+      '[fcsapi/silver] Forex response:',
+      JSON.stringify(forexData, null, 2)
+    );
+    const usdCadRate = forexData?.rate ? Number(forexData.rate) : 1.4; // Fallback rate
+    console.log('[fcsapi/silver] USD/CAD rate:', usdCadRate);
+
+    // Convert to CAD
+    const price_oz = price_oz_usd * usdCadRate;
+    const price_gram_24k = price_oz / 31.1034768;
+
+    console.log(
+      '[fcsapi/silver] Success! Price per oz (CAD):',
+      price_oz,
+      'Price per gram:',
+      price_gram_24k
+    );
+    return {
+      price_oz,
+      price_gram_24k,
+      currency: 'CAD',
+      provider: 'fcsapi',
+    };
   } catch (error) {
     console.error('[fcsapi/silver] Error:', error);
     return null;
@@ -233,9 +279,11 @@ export async function GET(request: Request): Promise<Response> {
   ];
 
   for (const { name, fn } of providers) {
+    console.log(`[Silver API] Trying provider: ${name}`);
     try {
       const result = await fn();
       if (result) {
+        console.log(`[Silver API] ✓ Success with ${name}`);
         // Cache the result
         if (!debug) setCachedPrice(cacheKey, result);
 
@@ -250,6 +298,7 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
 
+      console.log(`[Silver API] ✗ ${name} returned no data`);
       if (debug) {
         errors.push({
           provider: name,
@@ -257,6 +306,7 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
     } catch (error) {
+      console.log(`[Silver API] ✗ ${name} threw error:`, error);
       if (debug) {
         errors.push({
           provider: name,
