@@ -1,0 +1,23 @@
+name: Update Monthly Prices
+
+on:
+  schedule:
+    # Run at 00:00 UTC on the 1st of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Update Gold Prices
+        run: |
+          curl -X POST "https://zakatapi.vercel.app/api/gold/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
+      
+      - name: Update Silver Prices
+        run: |
+          curl -X POST "https://zakatapi.vercel.app/api/silver/update-monthly?secret=${{ secrets.UPDATE_MONTHLY_SECRET }}"
