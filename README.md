@@ -92,6 +92,34 @@ POST /api/silver/update-monthly?secret=YOUR_SECRET
 GET /silver-monthly-prices.json
 ```
 
+### Nisab API
+
+#### Get Current Nisab Value in Gold
+
+```
+GET /api/nisab
+GET /api/nisab?debug=1
+```
+
+**Query Parameters:**
+
+- `debug=1` - Returns detailed error information from all providers
+
+**Response:**
+
+```json
+{
+  "nisab": 17147.42,
+  "price_gram_24k": 201.7344,
+  "nisab_grams": 85,
+  "currency": "CAD",
+  "provider": "goldapi.io",
+  "cached": false
+}
+```
+
+The nisab endpoint calculates the Islamic nisab threshold, which is 85 grams of gold. Returns the current value in CAD based on 24k gold price per gram.
+
 ## Waterfall Provider Strategy
 
 Both gold and silver APIs use a resilient waterfall approach that tries providers sequentially until one succeeds:
