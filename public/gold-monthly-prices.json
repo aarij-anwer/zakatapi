@@ -22,5 +22,13 @@
     "currency": "CAD",
     "provider": "monthly_run",
     "cached": false
+  },
+  "2026-04": {
+    "price": 209.2666,
+    "price_oz": 6508.92,
+    "price_gram_24k": 209.2666,
+    "currency": "CAD",
+    "provider": "monthly_run",
+    "cached": false
   }
 }
