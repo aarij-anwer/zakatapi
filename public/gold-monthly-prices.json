@@ -30,5 +30,13 @@
     "currency": "CAD",
     "provider": "monthly_run",
     "cached": false
+  },
+  "2026-05": {
+    "price": 201.7971,
+    "price_oz": 6276.59,
+    "price_gram_24k": 201.7971,
+    "currency": "CAD",
+    "provider": "monthly_run",
+    "cached": false
   }
 }
